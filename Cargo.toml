@@ -4,3 +4,27 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+#sur
+##handshake
+aes = { version = "0.8.3", features = [] }
+cbc = "0.1.2"
+block-modes = "0.9.1"
+hex-literal = "0.4.1"
+hex = "0.4.3"
+base64 = { version = "0.21.7", features = [] }
+object = { version = "0.32.2", features = [] }
+serde = { version = "1.0.203", features = ["derive"] }
+rsa = "0.9.6"
+rand = "0.8.5"
+machine-uid = "0.5.1"
+generic-array = "0.14.7"
+
+##json
+serde_json = "1.0.117"
+#a clean
+
+
+
+
+
+typenum = "1.17.0"
