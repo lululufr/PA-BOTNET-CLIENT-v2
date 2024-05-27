@@ -1,25 +1,23 @@
 mod connexion;
+mod json;
 
 use std::borrow::Borrow;
-use std::io::{self, Read, Write};
+use std::io;
+use std::io::empty;
 use std::net::TcpStream;
 use std::thread;
 use std::str;
 
 use String;
 use std::sync::mpsc;
+use std::sync::mpsc::TryRecvError;
 
 // Handshake
 use rsa::{RsaPublicKey, RsaPrivateKey, Pkcs1v15Encrypt};
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use rand::rngs::OsRng;
 
-use serde_json;
-
-
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
-
-use serde::{Deserialize, Serialize};
 
 use generic_array::GenericArray;
 
@@ -40,34 +38,6 @@ fn get_user_input() -> String {
     io::stdin().read_line(&mut input).expect("Erreur lors de la saisis du message");
     input.trim().to_string()
 }
-
-
-#[derive(Serialize, Deserialize)]
-struct HandshakeConfJson{
-    action: String,
-    b64symetric: String,
-    b64iv: String,
-    multithread: bool,
-    stealth: bool
-}
-
-
-
-
-fn json_to_struct_handshake_stc(data: String) -> HandshakeConfJson {
-    let p = serde_json::from_str::<HandshakeConfJson>(&data).expect("Erreur JSON");
-    p
-}
-
-fn struct_to_json_handshake_stc(data:HandshakeConfJson) -> String{
-    let json_string = serde_json::to_string(&data);
-    json_string.unwrap()
-}
-
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
-
 
 fn send_encrypted_data_to_server(sender:mpsc::Sender<Vec<u8>>,
                                  data:String,
@@ -97,7 +67,7 @@ fn receive_encrypted_data_from_server(receiver:&mpsc::Receiver<Vec<u8>>,
                                       symetric_key:GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
                                       iv:GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>)
                                       -> String{
-    match receiver.recv() {
+    match receiver.try_recv() {
         Ok(data) => {
             println!("Data received successfully!");
 
@@ -117,9 +87,12 @@ fn receive_encrypted_data_from_server(receiver:&mpsc::Receiver<Vec<u8>>,
                 }
             }
         }
-        Err(err) => {
-            eprintln!("Error while receiving data: {:?}", err);
+        Err(TryRecvError::Empty) => {
             // Handle the error more gracefully, return a default string for now
+            String::new()
+        }
+        Err(TryRecvError::Disconnected)=>{
+            //eprintln!("Error : client déco !");
             String::new()
         }
     }
@@ -166,7 +139,7 @@ fn main() -> io::Result<()> {
     // Déchiffrement de la clé symétrique
     let decrypted_data = private_key.decrypt(Pkcs1v15Encrypt, &encrypted_hanshake_data).unwrap();
 
-    let handshake_data = json_to_struct_handshake_stc(str::from_utf8(decrypted_data.as_slice()).unwrap().to_string());
+    let handshake_data = json::json_to_struct_handshake_stc(str::from_utf8(decrypted_data.as_slice()).unwrap().to_string());
 
     let _stealth_mode = handshake_data.stealth;
     let _multithread_mode = handshake_data.multithread;
@@ -211,12 +184,19 @@ fn main() -> io::Result<()> {
 
     let _thread_test = thread::spawn(move|| {
         loop {
-            println!("Message Recu : {}", receive_encrypted_data_from_server(receiver.borrow(), symetric_key, iv));
+            let mut data = receive_encrypted_data_from_server(receiver.borrow(), symetric_key, iv);
+
+            if data.is_empty() {
+                continue;
+            }else {
+                println!("Message Recu : {}", data);
+            }
+
         }
     });
 
     loop {
-        // Réception des ordres du serveur
+        // emission vers serveur
         let mut input = String::new();
         println!("Entrez un message : ");
 
