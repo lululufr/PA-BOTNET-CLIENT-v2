@@ -1,5 +1,6 @@
 mod connexion;
 mod json;
+mod module;
 
 use std::borrow::Borrow;
 use std::io;
@@ -195,19 +196,17 @@ fn main() -> io::Result<()> {
         }
     });
 
-    loop {
+    //loop {
         // emission vers serveur
         let mut input = String::new();
         println!("Entrez un message : ");
 
-        match io::stdin().read_line(&mut input) {
-            Ok(_n) => {
-                println!("{}", input);
+        let val  = module::main("ls", "-l");
+        println!("{}", val);
 
-                send_encrypted_data_to_server(sender.clone(), input, symetric_key, iv);
-            }
-            Err(error) => println!("error: {error}"),
-        }
-    }
+        send_encrypted_data_to_server(sender.clone(), val, symetric_key, iv);
+
+        Ok(())
+    //}
 
 }
