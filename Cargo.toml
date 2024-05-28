@@ -18,6 +18,7 @@ rsa = "0.9.6"
 rand = "0.8.5"
 machine-uid = "0.5.1"
 generic-array = "0.14.7"
+pkcs7 = "0.4.1"
 
 ##json
 serde_json = "1.0.117"

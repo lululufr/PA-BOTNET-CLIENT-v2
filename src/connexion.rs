@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use std::sync::mpsc;
 
 pub(crate) fn connexion() -> std::io::Result<TcpStream> {
-    let stream =  TcpStream::connect("51.77.193.65:4242");
+    let stream =  TcpStream::connect("127.0.0.1:4242");
     println!("Connexion ETABLI");
     return stream;
 }
