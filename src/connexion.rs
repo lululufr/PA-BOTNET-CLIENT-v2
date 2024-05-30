@@ -1,6 +1,9 @@
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::mpsc;
+use std::thread;
+
+use std::time::Duration;
 
 pub(crate) fn connexion() -> std::io::Result<TcpStream> {
     let stream =  TcpStream::connect("127.0.0.1:4242");
@@ -35,6 +38,7 @@ pub(crate) fn reception(mut stream: TcpStream, channel: mpsc::Sender<Vec<u8>>) {
     loop {
         match stream.read(&mut buffer) {
             Ok(bytes_read) => {
+
                 if bytes_read == 0 {
                     // La connexion a été fermée
                     break;
@@ -45,6 +49,7 @@ pub(crate) fn reception(mut stream: TcpStream, channel: mpsc::Sender<Vec<u8>>) {
                 //println!("Received : {}", response);
                 //ordre_du_srv(response);
                 channel.send(buffer[..bytes_read].to_vec()).unwrap();
+                thread::sleep(Duration::new(3, 0));
 
             }
             Err(err) => {

