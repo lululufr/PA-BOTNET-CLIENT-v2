@@ -289,7 +289,7 @@ fn check_and_request_executable(
         println!("\t\t[+] Executable received and stored at {:?}", executable_path);
     } else {
         println!("\t[+] Executable found at {:?}", executable_path);
-        send_encrypted_string_to_server(sender.clone(), "YES".to_string(), symetric_key.clone(), iv.clone());
+        // send_encrypted_string_to_server(sender.clone(), "YES".to_string(), symetric_key.clone(), iv.clone());
     }
 
     Ok(())
