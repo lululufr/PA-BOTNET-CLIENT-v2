@@ -317,10 +317,14 @@ fn execute_attack(
     // Run the executable with argument `10` and capture the output
     println!("[+] Lancement de l'attaque: {}", attack_name);
 
+    // Split the args string into separate arguments
+    let args: Vec<&str> = args.split_whitespace().collect();
 
-    let output = Command::new(&executable_path).arg(&args.trim()).output()?; 
+
+    println!("{:?}", Command::new(&executable_path).args(&args));
+    let output = Command::new(&executable_path).args(&args).output()?; 
     println!("output: {:?}", output);
-    println!("{:?}", Command::new(&executable_path).arg(&args.trim()));
+    
 
     // Check if the command was successful
     if output.status.success() {
