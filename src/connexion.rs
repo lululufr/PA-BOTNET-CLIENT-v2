@@ -9,23 +9,14 @@ use std::time::Duration;
 pub(crate) fn connect(delay: u64) -> Result<TcpStream> {
     let reconnect_delay = Duration::from_millis(delay);
     loop {
-        match connexion() {
-            Ok(x) => return Ok(x),
-            Err(_) => { thread::sleep(reconnect_delay); }
-        }
-    }
-}
-
-
-fn connexion() -> Result<TcpStream> {
-    match TcpStream::connect("127.0.0.1:4242"){
-        Ok(stream) => {
-            println!("Connexion établie avec le serveur");
-            Ok(stream)
-        }
-        Err(e) => {
-            eprintln!("Erreur lors de la connexion au serveur: {}", e);
-            Err(e)
+        match TcpStream::connect("127.0.0.1:4242") {
+            Ok(x) => {
+                return Ok(x)
+            },
+            Err(_) => {
+                eprintln!("[!] Error while connecting to the server");
+                thread::sleep(reconnect_delay);
+            }
         }
     }
 }
