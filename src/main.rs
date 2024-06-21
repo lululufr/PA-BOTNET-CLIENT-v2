@@ -375,32 +375,29 @@ fn main() -> io::Result<()> {
     let mut symetric_key = GenericArray::default();
     let mut iv = GenericArray::default();
 
-    let reconnect_delay = Duration::from_millis(1000);
-
-    let mut stream = connexion::connexion()?;
+    let mut stream = connexion::connect(5000)?;
 
 
     loop{
         
         if connected == false {
-        
-            if first_connection == false {
+            
+            if first_connection == false{
                 println!("[!] Trying to reconnect to the server");
-                match connexion::connexion() {
+                match connexion::connect(5000) {
                     Ok(new_stream) => {
                         stream = new_stream;
                     }
                     Err(_) => {
                         println!("[!] Error while reconnecting to the server");
-                        thread::sleep(reconnect_delay);
                         continue;
                     }
                 }
-                
             }else{
-                println!("[+] Trying to connect to the server");
-                first_connection = false;
+                first_connection = false
             }
+            
+                
 
 
             // ========== HANDSHAKE ==========
