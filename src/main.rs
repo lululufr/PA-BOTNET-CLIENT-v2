@@ -436,10 +436,10 @@ fn main() -> io::Result<()> {
     };
 
     #[cfg(client_os = "windows")]
-    let os = "windows";
+    let os = "win";
 
     #[cfg(client_os = "linux")]
-    let os = "linux";
+    let os = "lin";
 
     let uid = machine_uid::get().unwrap();
 
