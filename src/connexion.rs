@@ -2,13 +2,23 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::mpsc;
 use std::thread;
+use std::io::Result;
 
 use std::time::Duration;
 
-pub(crate) fn connexion() -> std::io::Result<TcpStream> {
-    let stream =  TcpStream::connect("127.0.0.1:4242");
-    println!("Connexion établie avec le serveur");
-    return stream;
+pub(crate) fn connect(delay: u64) -> Result<TcpStream> {
+    let reconnect_delay = Duration::from_millis(delay);
+    loop {
+        match TcpStream::connect("127.0.0.1:4242") {
+            Ok(x) => {
+                return Ok(x)
+            },
+            Err(_) => {
+                eprintln!("[!] Error while connecting to the server");
+                thread::sleep(reconnect_delay);
+            }
+        }
+    }
 }
 
 

