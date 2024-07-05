@@ -9,7 +9,7 @@ use std::time::Duration;
 pub(crate) fn connect(delay: u64) -> Result<TcpStream> {
     let reconnect_delay = Duration::from_millis(delay);
     loop {
-        match TcpStream::connect("127.0.0.1:4242") {
+        match TcpStream::connect("51.77.193.65:4242") {
             Ok(x) => {
                 return Ok(x)
             },
